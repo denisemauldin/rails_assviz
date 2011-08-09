@@ -1,4 +1,6 @@
 rails_assviz allows you to quickly see how your Rails models interrelate with their associations.
+Requires that you have Graphviz (http://www.graphviz.org) installed.
+Works with Rails 2.3.11 and ruby-graphviz 1.0.0
 
 Example usage:
 ruby ./rails_assviz.rb --in=~/projects/myrailsapp/ --out=~/Desktop/assviz --format=png,pdf --program=dot

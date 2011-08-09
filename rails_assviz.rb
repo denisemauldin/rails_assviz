@@ -16,7 +16,7 @@ end
 
 #Checks for active_support
 begin
-  require 'active_support'
+  require 'active_support/all'
 rescue LoadError
   raise "Install the Ruby on Rails gem: gem install rails"
   return false
@@ -30,7 +30,7 @@ def list_for_help(list_type)
   tmp_line = []
   list.each do |f| 
     if f_count > 6
-      output+= spacer+tmp_line.to_sentence(:last_word_connector => ", ", :two_words_connector => ", ")+"\n"
+      output+= spacer+(tmp_line.to_sentence(:last_word_connector => ", ", :two_words_connector => ", "))+"\n"
       tmp_line=[]
       f_count=0
     end
@@ -50,6 +50,7 @@ OPTIONS:
 #{list_for_help(:formats)}
   --program=list,of,algs      specify graphviz algorithms, comma separated:
 #{list_for_help(:programs)}
+  --filter=yes|no                filter out nodes that do not have any edges
 
 "
 
@@ -59,9 +60,10 @@ def stop_executing(options={})
 end
 
 @options = {}
-
 # Handle command line arguments
 ARGV.each do |arg|
+puts "arg #{arg}"
+
   stop_executing unless arg =~ /--[a-zA-Z]+ *= *[a-zA-Z\/~.]/
   split_arg = arg.split("=")
   case split_arg[0]
@@ -99,6 +101,15 @@ ARGV.each do |arg|
         stop_executing(:no_help=>true)
       end
     end
+  when "--filter"
+   if (split_arg[1] == 'yes')
+     @options[:filter] = 1
+   elsif (split_arg[1] == 'no')
+     @options[:filter] = 0
+   else
+     puts "ERROR: --filter must be yes or no\n\n"
+     stop_executing(:no_help=>true)
+   end 
   else
     stop_executing
   end
@@ -109,6 +120,7 @@ end
 @options[:out] = (FileTest.writable?(File.expand_path(File.join(Dir.getwd))) ? File.expand_path(File.join(Dir.getwd)) : stop_executing)  if @options[:out].nil?
 @options[:format] = ["png"] if @options[:format].nil?
 @options[:program] = ["dot"] if @options[:program].nil?
+@options[:filter] = 0 if @options[:filter].nil?
 
 # dig through the model files and look for relations to other models
 model_data = []
@@ -126,6 +138,7 @@ Dir.foreach(@options[:in]) do |file|
 end
 nodes.uniq!
 
+nodes_with_edges = []
 # build the edge relationships
 edges.each do |e|
   e[1].gsub!( /\A *?((has_many)|(belongs_to)|(has_and_belongs_to_many)|(has_one)) +:(\w+).*/m, '\6%\1')
@@ -134,6 +147,11 @@ edges.each do |e|
   e[1] = f[1]
 end
 edges.delete_if{|e|e[1]=="belongs_to"}
+edges.each do |e|
+  nodes_with_edges << e[0]
+  nodes_with_edges << e[2]
+end
+nodes_with_edges.uniq!
 
 # put everything together with graphviz
 g = GraphViz::new( "structs", "type" => "graph", :use => "dot" )
@@ -147,7 +165,16 @@ g.node[:style] = "filled"
 g.node[:color] = "#336699"
 g.node[:fontcolor] = "#ddeeff"
 
-nodes.each{|node| g.add_node(node)}
+proc_nodes = []
+if @options[:filter] == 1
+  proc_nodes = nodes_with_edges
+else
+  proc_nodes = nodes
+end  
+
+proc_nodes.each{|node| 
+  g.add_node(node)
+}
 edges.each do |edge| 
   e=g.add_edge(edge[0],edge[2])
   e.fontcolor = (edge[1] == "has_many" ? "#009900" : "#990000")
@@ -157,6 +184,7 @@ end
 
 @options[:program].each do |program|
   @options[:format].each do |format|
-    g.output(:output => format, :file => File.join(@options[:out],"#{program}_erd."+format), :use => program )
+    #g.output(:output => format, :file => File.join(@options[:out],"#{program}_erd."+format), :use => program )
+    g.output(format.to_sym => File.join(@options[:out],"#{program}_erd."+format), :use => program )
   end
 end
